@@ -434,7 +434,7 @@
   </header>
 
   <div id="stage">
-    <canvas id="cv" width="844" height="1292"></canvas>
+    <canvas id="cv" width="445" height="626"></canvas>
 
     <div id="legend"><div class="chip" data-t="mole"><span class="dot" style="color:#ffb000;background:#ffb000"></span>
       Molefay <span class="n">5</span></div><div class="chip" data-t="jolly"><span class="dot" style="color:#36a9ff;background:#36a9ff"></span>
@@ -447,9 +447,9 @@
       <button class="vbtn on" id="vRig">RIG</button>
       <button class="vbtn" id="vLbl">ID</button>
       <button class="vbtn" id="vXray" title="Toggle rig transparency">SEE</button>
-      <button class="vbtn" id="vShare" title="Generate shareable QR for crew" style="color:var(--acc)">QR</button>
+      
     </div>
-    <div id="hint" style="opacity: 0;">drag to orbit · pinch to zoom · tap a fixture</div>
+    <div id="hint">drag to orbit · pinch to zoom · tap a fixture</div>
 
     <div id="splash" style="display: none;">
       <h1>RIG<b>VIEW</b></h1>
@@ -476,41 +476,7 @@
   </div>
 
   <!-- ---------- share modal ---------- -->
-  <div id="shareWrap" style="display: flex;">
-    <div id="shareBox">
-      <button class="sclose" id="shareClose">×</button>
-      <h2 style="font-family:var(--disp);letter-spacing:.06em;font-size:14px;margin-bottom:14px">
-        <span style="color:var(--acc)">SHARE</span> WITH CREW
-      </h2>
-
-      <div id="shareStep1" style="display: block;">
-        <p style="color:var(--dim);font-size:11px;line-height:1.5;margin-bottom:10px">
-          1. Click <b style="color:var(--acc2)">DOWNLOAD HTML</b> below — you'll get a self-contained file with the rig embedded.<br>
-          2. Upload that file to Dropbox.<br>
-          3. Right-click it in Dropbox → <b>Copy link</b>.<br>
-          4. Paste the link here:
-        </p>
-        <button class="vbtn" id="exportBtn" style="width:100%;height:40px;color:var(--acc2);border-color:var(--acc2);margin-bottom:14px" disabled="">BUILDING…</button>
-        <input id="dbxUrl" type="url" placeholder="https://www.dropbox.com/scl/fi/..." style="width:100%;padding:10px;background:#0a0c10;border:1px solid var(--line);
-          border-radius:6px;color:var(--ink);font-family:var(--mono);font-size:11px;margin-bottom:10px">
-        <button class="vbtn" id="makeQR" style="width:100%;height:40px;color:var(--acc);border-color:var(--acc)">
-          GENERATE QR →
-        </button>
-      </div>
-
-      <div id="shareStep2" style="display:none;text-align:center">
-        <div id="qrHost" style="background:#fff;padding:16px;border-radius:8px;display:inline-block;margin-bottom:12px"></div>
-        <div style="font-family:var(--mono);font-size:10px;color:var(--dim);
-          word-break:break-all;background:#0a0c10;padding:8px;border-radius:6px;
-          border:1px solid var(--line);margin-bottom:12px;text-align:left" id="finalUrl"></div>
-        <div style="display:flex;gap:8px">
-          <button class="vbtn" id="copyUrl" style="flex:1;height:36px">COPY URL</button>
-          <button class="vbtn" id="savePng" style="flex:1;height:36px">SAVE QR</button>
-          <button class="vbtn" id="qrBack" style="flex:1;height:36px">BACK</button>
-        </div>
-      </div>
-    </div>
-  </div>
+  
 
   <footer>
     <span id="fCount"><b>30</b> fixtures</span>
@@ -1301,20 +1267,37 @@ function arrayBufferToBase64(buf){
 async function generateSelfContainedHtml(){
   if(!window.__loadedMvrBytes) throw new Error('No MVR loaded');
   let html;
-  // Try fetching the current page source. This works on http(s):// but fails on file://
-  // due to CORS, in which case we fall back to serializing the live DOM.
   try{
     const resp=await fetch(location.href, {cache:'no-store'});
     if(resp.ok) html=await resp.text();
-  }catch(e){ /* fall through */ }
+  }catch(e){}
   if(!html){
-    html='<!doctype html>\n'+document.documentElement.outerHTML;
+    // Clone the DOM, force-hide the share modal, then serialize
+    const clone=document.documentElement.cloneNode(true);
+    const sw=clone.querySelector('#shareWrap');
+    if(sw) sw.setAttribute('style','display:none');
+    const s1=clone.querySelector('#shareStep1');
+    if(s1) s1.setAttribute('style','display:block');
+    const s2=clone.querySelector('#shareStep2');
+    if(s2) s2.setAttribute('style','display:none');
+    // Reset BUILDING button text
+    const eb=clone.querySelector('#exportBtn');
+    if(eb) eb.textContent='↓ DOWNLOAD HTML';
+    html='<!doctype html>\n'+clone.outerHTML;
   }
-  // Strip any prior embedded payload so re-exports don't stack
   html=html.replace(/<script>window\.__MVR_B64__=[\s\S]*?<\/script>/, '');
+  // Strip the share modal entirely from the exported file — crew doesn't need it
+  try{
+    const dp=new DOMParser().parseFromString(html,'text/html');
+    const sw=dp.getElementById('shareWrap');
+    if(sw) sw.remove();
+    const vs=dp.getElementById('vShare');
+    if(vs) vs.remove();
+    html='<!doctype html>\n'+dp.documentElement.outerHTML;
+  }catch(e){}
   const b64=arrayBufferToBase64(window.__loadedMvrBytes);
   const name=window.__loadedMvrName||'embedded.mvr';
   const inject=`
 
 
-</body></html>
+</body></html></script></body></html>
